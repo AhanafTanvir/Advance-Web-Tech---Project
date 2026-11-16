@@ -30,7 +30,7 @@ export class AuthService {
       dto.fullName,
       dto.email,
       passwordHash,
-      dto.role ?? Role.JOB_SEEKER,
+      dto.role ?? (Object.values(Role)[0] as Role),
     );
 
     return {

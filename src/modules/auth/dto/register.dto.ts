@@ -2,7 +2,7 @@
 import { Transform } from "class-transformer";
 import {
   IsEmail,
-  IsIn,
+  IsEnum,
   IsOptional,
   IsString,
   MaxLength,
@@ -33,6 +33,6 @@ export class RegisterDto {
   password!: string;
 
   @IsOptional()
-  @IsIn([Role.JOB_SEEKER, Role.EMPLOYER])
+  @IsEnum(["JOB_SEEKER" as Role, "EMPLOYER" as Role])
   role?: Role;
 }
