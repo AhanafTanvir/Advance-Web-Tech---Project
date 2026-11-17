@@ -34,8 +34,10 @@ export class OrganizationsController {
     @Patch(':id')
     @UseGuards(JwtGuard)
     update(@Param('id', ParseUUIDPipe) id: string,
-            @Body() updateOrganizationDto: UpdateOrganizationDto){
-    return this.organizationsService.update(id, updateOrganizationDto);
+            @Body() updateOrganizationDto: UpdateOrganizationDto,
+            @Req() req: {user: AuthUser})
+    {
+        return this.organizationsService.update(id, updateOrganizationDto, req.user.id, req.user.roles);
     }
 
     @Patch(':id/verify')
@@ -47,7 +49,8 @@ export class OrganizationsController {
 
     @Delete(':id')
     @UseGuards(JwtGuard)
-    remove(@Param('id', ParseUUIDPipe)id: string){
-    return this.organizationsService.remove(id)
+    remove(@Param('id', ParseUUIDPipe)id: string,
+    @Req() req: {user: AuthUser}){
+    return this.organizationsService.remove(id, req.user.id, req.user.roles)
     }
 }

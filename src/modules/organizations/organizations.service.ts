@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Organization } from "./entities/organization.entity";
 import { DataSource, Repository } from "typeorm";
@@ -59,8 +59,13 @@ export class OrganizationsService {
     return org;
   }
 
-  async update(id: string, updateOrgDto: UpdateOrganizationDto) {
+  async update(id: string, updateOrgDto: UpdateOrganizationDto, userId: string, userRoles: string[]) {
     const org = await this.findOne(id);
+    const isAdmin = userRoles.includes(Role.ADMIN);
+    const isOwner = await this.isOrgOwner(userId, id);
+    if (!isAdmin && !isOwner) {
+      throw new ForbiddenException(`You do not have permission to update this organization`);
+    }
     Object.assign(org, updateOrgDto);
     return await this.orgRepository.save(org);
   }
@@ -75,8 +80,13 @@ export class OrganizationsService {
     return org;
   }
 
-  async remove(id: string) {
+  async remove(id: string, userId: string, userRoles: string[]) {
     const org = await this.findOne(id);
+    const isAdmin = userRoles.includes(Role.ADMIN);
+    const isOwner = await this.isOrgOwner(userId, id);
+    if (!isAdmin && !isOwner) {
+      throw new ForbiddenException(`You do not have permission to remove this organization`);
+    }
     await this.orgRepository.remove(org);
     return {
       message: `Organization with ID ${id} has been removed successfully`,
