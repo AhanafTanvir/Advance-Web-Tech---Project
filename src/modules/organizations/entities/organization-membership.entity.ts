@@ -12,10 +12,10 @@ export class OrganizationMembership{
     @PrimaryGeneratedColumn("uuid")
     id!: string;
 
-    @Column({type: "uuid"})
+    @Column({type: "uuid", name: "userId"})
     userId!: string;
 
-    @Column({type: "uuid"})
+    @Column({type: "uuid", name: "organizationId"})
     organizationId!: string;
 
     @ManyToOne(() => User, { onDelete: "CASCADE" })
