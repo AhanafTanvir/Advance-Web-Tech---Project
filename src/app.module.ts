@@ -8,10 +8,12 @@ import global_config from "@/config/global_config";
 import { BullModule } from "@nestjs/bull";
 import { OrganizationsModule } from "./modules/organizations/organizations.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { ProfilesModule } from "./modules/profiles/profiles.module";
 
 @Module({
   imports: [
     PostgresDatabaseProviderModule,
+    ProfilesModule,
 
     ConfigModule.forRoot({
       isGlobal: true,
