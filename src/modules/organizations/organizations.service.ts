@@ -8,6 +8,8 @@ import {
 } from "./entities/organization-membership.entity";
 import { CreateOrganizationDto } from "./dto/create-organization.dto";
 import { UpdateOrganizationDto } from "./dto/update-organization.dto";
+import { User } from "../users/entities/user.entity";
+import { Role } from "@/src/common/enums/role.enum";
 
 @Injectable()
 export class OrganizationsService {
@@ -28,14 +30,12 @@ export class OrganizationsService {
 
       const membership = manager.create(OrganizationMembership, {
         userId: userId,
-        organiztionId: org.id,
+        organizationId: org.id,
         role: MembershipRole.OWNER,
       });
       await manager.save(membership);
 
-      await manager.query(`UPDATE users SET role = 'EMPLOYER' WHERE id = $1`, [
-        userId,
-      ]);
+      await manager.update(User,userId, { role: Role.EMPLOYER });
 
       return org;
     });

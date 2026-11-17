@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { Organization } from "./organization.entity";
+import { User } from "../../users/entities/user.entity";
 
 export enum MembershipRole {
     OWNER="OWNER",
@@ -16,6 +17,10 @@ export class OrganizationMembership{
 
     @Column({type: "uuid"})
     organizationId!: string;
+
+    @ManyToOne(() => User, { onDelete: "CASCADE" })
+    @JoinColumn({ name: "userId" })
+    user!: User;
 
     @ManyToOne(() => Organization, { onDelete: "CASCADE" })
     @JoinColumn({ name: "organizationId" })
