@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import {
   Body,
   Controller,
@@ -19,6 +20,10 @@ import { Role } from "../../common/enums/role.enum";
 import { CreateJobDto } from "./dto/create-job.dto";
 import { QueryJobDto } from "./dto/query-job.dto";
 import { UpdateJobDto } from "./dto/update-job.dto";
+=======
+import { Controller, Get, Param, ParseUUIDPipe, Query } from "@nestjs/common";
+import { ApiTags, ApiOperation } from "@nestjs/swagger";
+>>>>>>> origin/feature/organizations
 import { JobsService } from "./jobs.service";
 
 @ApiTags("Jobs")
@@ -26,6 +31,7 @@ import { JobsService } from "./jobs.service";
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
+<<<<<<< HEAD
   @Post()
   @HttpCode(201)
   @UseGuards(JwtGuard, RolesGuard)
@@ -64,4 +70,20 @@ export class JobsController {
   remove(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.jobsService.remove(id, user);
   }
+=======
+  @Get()
+  @ApiOperation({ summary: "Get all jobs with pagination" })
+  findAll(
+    @Query("page") page: string = "1",
+    @Query("limit") limit: string = "10",
+  ) {
+    return this.jobsService.findAll(+page, +limit);
+  }
+
+  @Get(":id")
+  @ApiOperation({ summary: "Get job by ID" })
+  findOne(@Param("id", ParseUUIDPipe) id: string) {
+    return this.jobsService.findOne(id);
+  }
+>>>>>>> origin/feature/organizations
 }

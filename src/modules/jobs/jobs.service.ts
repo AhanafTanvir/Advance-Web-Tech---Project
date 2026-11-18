@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import {
   ForbiddenException,
   Injectable,
@@ -10,12 +11,18 @@ import { OrganizationsService } from "../organizations/organizations.service";
 import { CreateJobDto } from "./dto/create-job.dto";
 import { QueryJobDto } from "./dto/query-job.dto";
 import { UpdateJobDto } from "./dto/update-job.dto";
+=======
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+>>>>>>> origin/feature/organizations
 import { Job } from "./entities/job.entity";
 
 @Injectable()
 export class JobsService {
   constructor(
     @InjectRepository(Job)
+<<<<<<< HEAD
     private readonly jobsRepository: Repository<Job>,
     private readonly organizationsService: OrganizationsService,
   ) {}
@@ -98,4 +105,28 @@ export class JobsService {
       throw new ForbiddenException("You do not own this organization");
     }
   }
+=======
+    private readonly jobRepository: Repository<Job>,
+  ) {}
+
+  async findAll(page: number = 1, limit: number = 10) {
+    const [data, total] = await this.jobRepository.findAndCount({
+      skip: (page - 1) * limit,
+      take: limit,
+      relations: ["organization"],
+    });
+    return { data, total, page, limit };
+  }
+
+  async findOne(id: string) {
+    const job = await this.jobRepository.findOne({
+      where: { id },
+      relations: ["organization"],
+    });
+    if (!job) {
+      throw new NotFoundException(`Job with ID ${id} not found`);
+    }
+    return job;
+  }
+>>>>>>> origin/feature/organizations
 }
