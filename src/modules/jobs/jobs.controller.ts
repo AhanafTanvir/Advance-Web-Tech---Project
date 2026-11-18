@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import {
   Body,
   Controller,
@@ -12,7 +11,7 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentUser, Roles } from "../../common/decorators";
 import { JwtGuard, RolesGuard } from "../../common/guard";
 import { AuthUser } from "../../common/interfaces/auth-user.interface";
@@ -20,10 +19,6 @@ import { Role } from "../../common/enums/role.enum";
 import { CreateJobDto } from "./dto/create-job.dto";
 import { QueryJobDto } from "./dto/query-job.dto";
 import { UpdateJobDto } from "./dto/update-job.dto";
-=======
-import { Controller, Get, Param, ParseUUIDPipe, Query } from "@nestjs/common";
-import { ApiTags, ApiOperation } from "@nestjs/swagger";
->>>>>>> origin/feature/organizations
 import { JobsService } from "./jobs.service";
 
 @ApiTags("Jobs")
@@ -31,22 +26,24 @@ import { JobsService } from "./jobs.service";
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
-<<<<<<< HEAD
   @Post()
   @HttpCode(201)
   @UseGuards(JwtGuard, RolesGuard)
   @Roles(Role.EMPLOYER)
   @ApiBearerAuth()
+  @ApiOperation({ summary: "Create a new job posting (EMPLOYER only)" })
   create(@Body() dto: CreateJobDto, @CurrentUser() user: AuthUser) {
     return this.jobsService.create(dto, user);
   }
 
   @Get()
+  @ApiOperation({ summary: "List all jobs with optional filters and search" })
   findAll(@Query() query: QueryJobDto) {
     return this.jobsService.findAll(query);
   }
 
   @Get(":id")
+  @ApiOperation({ summary: "Get a single job by ID" })
   findOne(@Param("id", ParseUUIDPipe) id: string) {
     return this.jobsService.findOne(id);
   }
@@ -55,6 +52,7 @@ export class JobsController {
   @UseGuards(JwtGuard, RolesGuard)
   @Roles(Role.EMPLOYER)
   @ApiBearerAuth()
+  @ApiOperation({ summary: "Update a job posting (owner EMPLOYER only)" })
   update(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateJobDto,
@@ -67,23 +65,8 @@ export class JobsController {
   @UseGuards(JwtGuard, RolesGuard)
   @Roles(Role.EMPLOYER, Role.ADMIN)
   @ApiBearerAuth()
+  @ApiOperation({ summary: "Delete a job posting (owner EMPLOYER or ADMIN)" })
   remove(@Param("id", ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.jobsService.remove(id, user);
   }
-=======
-  @Get()
-  @ApiOperation({ summary: "Get all jobs with pagination" })
-  findAll(
-    @Query("page") page: string = "1",
-    @Query("limit") limit: string = "10",
-  ) {
-    return this.jobsService.findAll(+page, +limit);
-  }
-
-  @Get(":id")
-  @ApiOperation({ summary: "Get job by ID" })
-  findOne(@Param("id", ParseUUIDPipe) id: string) {
-    return this.jobsService.findOne(id);
-  }
->>>>>>> origin/feature/organizations
 }
