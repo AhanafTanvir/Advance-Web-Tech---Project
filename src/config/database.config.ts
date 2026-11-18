@@ -85,7 +85,7 @@ export const dataSourceOptions: DataSourceOptions = {
   schema: "public",
   entities: [__dirname + "/../modules/**/entities/*.entity.{ts,js}"],
   namingStrategy: new SnakeNamingStrategy(),
-  migrations: [__dirname + "/../database/migrations/*.ts"],
+  migrations: [__dirname + "/../database/migrations/*.{ts,js}"],
   logging: process.env.NODE_DB_ENV
     ? process.env.NODE_DB_ENV == "development"
       ? false

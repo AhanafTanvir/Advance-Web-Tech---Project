@@ -1,4 +1,28 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: opportunity-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "123456"
+      POSTGRES_DB: opportunity
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: opportunity-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
   krown-dex-backend-service:
     build: .
     image: ${CONTAINER_NAME:-krown-dex-backend}-img:${GIT_COMMIT_HASH:-latest}
@@ -7,8 +31,7 @@ services:
     tty: true
 
     ports:
-      - "${RTC_PORT_MIN:-10000}-${RTC_PORT_MAX:-10100}:${RTC_PORT_MIN:-10000}-${RTC_PORT_MAX:-10100}"
-      - "${RTC_PORT_MIN:-10000}-${RTC_PORT_MAX:-10100}:${RTC_PORT_MIN:-10000}-${RTC_PORT_MAX:-10100}/udp"
+      - "${PORT:-5001}:5001"
 
     networks:
       - app-network
@@ -16,15 +39,12 @@ services:
     env_file: .env
     environment:
       APP_VERSION: "${GIT_COMMIT_HASH:-latest}"
+    depends_on:
+      - postgres
 
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:${PORT:-5001}"]
-      interval: 5s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+volumes:
+  postgres_data:
 
 networks:
   app-network:
     driver: bridge
-    external: true
