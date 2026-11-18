@@ -9,6 +9,7 @@ import helmet from "helmet";
 import { join } from "path";
 import { ValidationPipe } from "@nestjs/common";
 import { AllExceptionsFilter } from "@/common/filters";
+import { LoggingInterceptor } from "@/common/interceptors";
 
 dotenv.config();
 
@@ -18,6 +19,9 @@ async function bootstrap() {
 
   // Global Exception Filter
   app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Global Logging Interceptor
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Global Validation Pipe
   app.useGlobalPipes(
