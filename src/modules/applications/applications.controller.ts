@@ -16,6 +16,8 @@ import {
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from "@nestjs/swagger";
@@ -28,6 +30,7 @@ import { ApplicationsService } from "./applications.service";
 import { CreateApplicationDto } from "./dto/create-application.dto";
 import { UpdateApplicationStatusDto } from "./dto/update-application-status.dto";
 import { QueryApplicationDto } from "./dto/query-application.dto";
+import { ApplicationStatus } from "./entities/job-application.entity";
 
 interface AuthenticatedRequest {
   user: AuthUser;
@@ -51,6 +54,7 @@ export class ApplicationsController {
     summary: "Apply for a job (Job Seeker only)",
     description: "Submit a new job application for the specified job. Returns 409 if already applied.",
   })
+  @ApiParam({ name: "jobId", type: "string", format: "uuid", description: "Target Job UUID" })
   @ApiResponse({ status: 201, description: "Application successfully submitted" })
   @ApiResponse({ status: 400, description: "Bad Request - invalid body or param" })
   @ApiResponse({ status: 401, description: "Unauthorized - missing or invalid token" })
@@ -66,7 +70,6 @@ export class ApplicationsController {
   }
 
   // 2. GET /applications/me (Access: JOB_SEEKER, returns 200)
-  // MUST be placed BEFORE :id route so 'me' is not caught as a UUID param
   @Get("applications/me")
   @UseGuards(RolesGuard)
   @Roles(Role.JOB_SEEKER)
@@ -74,6 +77,9 @@ export class ApplicationsController {
     summary: "Get current job seeker's applications",
     description: "Retrieve a paginated list of all job applications submitted by the current user.",
   })
+  @ApiQuery({ name: "page", required: false, type: Number, description: "Page number (default: 1)" })
+  @ApiQuery({ name: "limit", required: false, type: Number, description: "Items per page (default: 10)" })
+  @ApiQuery({ name: "status", required: false, enum: ApplicationStatus, description: "Filter by application status" })
   @ApiResponse({ status: 200, description: "List of user applications retrieved" })
   @ApiResponse({ status: 401, description: "Unauthorized - missing or invalid token" })
   @ApiResponse({ status: 403, description: "Forbidden - user is not a job seeker" })
@@ -92,6 +98,10 @@ export class ApplicationsController {
     summary: "Get applications for a job (Job owner employer only)",
     description: "Retrieve all applicant submissions for a job owned by the logged-in employer.",
   })
+  @ApiParam({ name: "jobId", type: "string", format: "uuid", description: "Target Job UUID" })
+  @ApiQuery({ name: "page", required: false, type: Number, description: "Page number (default: 1)" })
+  @ApiQuery({ name: "limit", required: false, type: Number, description: "Items per page (default: 10)" })
+  @ApiQuery({ name: "status", required: false, enum: ApplicationStatus, description: "Filter by status" })
   @ApiResponse({ status: 200, description: "List of job applications retrieved" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 403, description: "Forbidden - user is not the job owner employer" })
@@ -110,6 +120,7 @@ export class ApplicationsController {
     summary: "Get application details by ID (Applicant or job owner)",
     description: "Retrieve single application details. Accessible by applicant or job owner employer.",
   })
+  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Job Application UUID" })
   @ApiResponse({ status: 200, description: "Application details retrieved" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 403, description: "Forbidden - user is neither applicant nor job owner" })
@@ -129,6 +140,7 @@ export class ApplicationsController {
     summary: "Update application status (Job owner employer only)",
     description: "Update the status of an application (e.g. REVIEWING, ACCEPTED, REJECTED).",
   })
+  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Job Application UUID" })
   @ApiResponse({ status: 200, description: "Application status updated successfully" })
   @ApiResponse({ status: 400, description: "Bad Request - invalid status value" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
@@ -148,6 +160,7 @@ export class ApplicationsController {
     summary: "Withdraw job application (Applicant only)",
     description: "Withdraw / cancel a previously submitted job application.",
   })
+  @ApiParam({ name: "id", type: "string", format: "uuid", description: "Job Application UUID" })
   @ApiResponse({ status: 200, description: "Application withdrawn successfully" })
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 403, description: "Forbidden - user is not the applicant" })
