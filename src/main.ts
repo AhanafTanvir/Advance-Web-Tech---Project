@@ -8,6 +8,7 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { join } from "path";
 import { ValidationPipe } from "@nestjs/common";
+import { AllExceptionsFilter } from "@/common/filters";
 
 dotenv.config();
 
@@ -15,16 +16,20 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.setGlobalPrefix("api");
 
+  // Global Exception Filter
+  app.useGlobalFilters(new AllExceptionsFilter());
+
+  // Global Validation Pipe
   app.useGlobalPipes(
-  new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: false,
-    transform: true,
-    transformOptions: {
-      enableImplicitConversion: true,
-    },
-  }),
-);
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    }),
+  );
 
   app.useStaticAssets(join(process.cwd(), "uploads"), {
     prefix: "/uploads/",
@@ -38,14 +43,12 @@ async function bootstrap() {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          // Swagger UI needs 'unsafe-inline' to function correctly
           scriptSrc: ["'self'", "'unsafe-inline'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
-          imgSrc: ["'self'", "data:", "validator.swagger.io"], // Allow Swagger images
+          imgSrc: ["'self'", "data:", "validator.swagger.io"],
           connectSrc: ["'self'"],
         },
       },
-      // This policy can block Swagger assets, so we disable it for now
       crossOriginEmbedderPolicy: false,
     }),
   );
@@ -57,9 +60,10 @@ async function bootstrap() {
     next();
   });
 
-  // 2. Swagger Configuration
+  // 2. Swagger Configuration with Bearer Auth
   const config = new DocumentBuilder()
-    .setTitle("KDex API")
+    .setTitle("Opportunity API")
+    .setDescription("Job Portal and Opportunities Platform API")
     .setVersion("1.0")
     .addBearerAuth()
     .build();
