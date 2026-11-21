@@ -157,7 +157,7 @@ export class ApplicationsController {
   // 6. DELETE /applications/:id (Access: Applicant withdraw, returns 200)
   @Delete("applications/:id")
   @ApiOperation({
-    summary: "Withdraw job application (Applicant only)",
+    summary: "Withdraw job application without deleting status history",
     description: "Withdraw / cancel a previously submitted job application.",
   })
   @ApiParam({ name: "id", type: "string", format: "uuid", description: "Job Application UUID" })

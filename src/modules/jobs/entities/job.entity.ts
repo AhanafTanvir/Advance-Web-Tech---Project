@@ -20,11 +20,19 @@ export enum JobType {
   REMOTE = "REMOTE",
 }
 
+/** From the user's previous Jobs implementation. */
+export enum JobStatus {
+  DRAFT = "DRAFT",
+  OPEN = "OPEN",
+  CLOSED = "CLOSED",
+}
+
 @Entity("jobs")
 export class Job {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
+  // This project uses snake_case for Jobs (unlike the standalone prototype).
   @Column({ type: "uuid", name: "organization_id" })
   organizationId!: string;
 
@@ -43,6 +51,12 @@ export class Job {
 
   @Column({ type: "varchar", length: 255, nullable: true })
   location!: string | null;
+
+  @Column({ type: "varchar", length: 20, default: JobStatus.OPEN })
+  status!: JobStatus;
+
+  @Column({ type: "timestamptz", nullable: true })
+  deadline!: Date | null;
 
   @OneToMany(() => JobApplication, (application) => application.job)
   applications!: JobApplication[];

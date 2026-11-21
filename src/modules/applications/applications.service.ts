@@ -1,239 +1,153 @@
 import {
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
+  ConflictException, ForbiddenException, Injectable, NotFoundException,
 } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import {
-  ApplicationStatus,
-  JobApplication,
-} from "./entities/job-application.entity";
-import { Job } from "../jobs/entities/job.entity";
+import { DataSource, EntityManager, Repository } from "typeorm";
+import { AuthUser } from "../../common/interfaces/auth-user.interface";
+import { Role } from "../../common/enums/role.enum";
 import { OrganizationsService } from "../organizations/organizations.service";
+import { Job, JobStatus } from "../jobs/entities/job.entity";
 import { CreateApplicationDto } from "./dto/create-application.dto";
-import { UpdateApplicationStatusDto } from "./dto/update-application-status.dto";
 import { QueryApplicationDto } from "./dto/query-application.dto";
-import { AuthUser } from "@/common/interfaces/auth-user.interface";
-import { Role } from "@/common/enums/role.enum";
+import { UpdateApplicationStatusDto } from "./dto/update-application-status.dto";
+import { ApplicationStatusHistory } from "./entities/application-status-history.entity";
+import { ApplicationStatus, JobApplication } from "./entities/job-application.entity";
 
 @Injectable()
 export class ApplicationsService {
   constructor(
-    @InjectRepository(JobApplication)
-    private readonly applicationRepository: Repository<JobApplication>,
-
-    @InjectRepository(Job)
-    private readonly jobRepository: Repository<Job>,
-
+    @InjectRepository(JobApplication) private readonly applications: Repository<JobApplication>,
+    @InjectRepository(Job) private readonly jobs: Repository<Job>,
     private readonly organizationsService: OrganizationsService,
+    private readonly dataSource: DataSource,
   ) {}
 
-  // 1. POST /jobs/:jobId/applications (Access: JOB_SEEKER)
-  async create(
-    jobId: string,
-    dto: CreateApplicationDto,
-    user: AuthUser,
-  ): Promise<JobApplication> {
-    const job = await this.jobRepository.findOne({
-      where: { id: jobId },
-    });
-
-    if (!job) {
-      throw new NotFoundException(`Job with ID ${jobId} not found`);
+  private async requireOwner(orgId: string, user: AuthUser): Promise<void> {
+    if (!user.roles?.includes(Role.EMPLOYER) && !user.roles?.includes(Role.ADMIN)) {
+      throw new ForbiddenException("Employer role required");
     }
-
-    const existing = await this.applicationRepository.findOne({
-      where: {
-        jobId,
-        applicantId: user.id,
-      },
-    });
-
-    if (existing) {
-      throw new ConflictException(
-        "You have already submitted an application for this job",
-      );
+    if (user.roles?.includes(Role.ADMIN)) return;
+    if (!await this.organizationsService.isOrgOwner(user.id, orgId)) {
+      throw new ForbiddenException("You do not own this organization");
     }
+  }
 
-    const application = this.applicationRepository.create({
-      jobId,
-      applicantId: user.id,
-      resumeUrl: dto.resumeUrl,
-      coverLetter: dto.coverLetter,
-      status: ApplicationStatus.PENDING,
-    });
+  private isTerminal(status: ApplicationStatus): boolean {
+    return status === ApplicationStatus.ACCEPTED || status === ApplicationStatus.REJECTED
+      || status === ApplicationStatus.WITHDRAWN;
+  }
 
+  async create(jobId: string, dto: CreateApplicationDto, user: AuthUser) {
+    const job = await this.jobs.findOneBy({ id: jobId });
+    if (!job) throw new NotFoundException("Job not found");
+    if (job.status !== JobStatus.OPEN || (job.deadline && job.deadline.getTime() <= Date.now())) {
+      throw new ConflictException("This job is not open for applications");
+    }
+    if (!user.roles?.includes(Role.JOB_SEEKER)) {
+      throw new ForbiddenException("Only job seekers can apply");
+    }
     try {
-      return await this.applicationRepository.save(application);
-    } catch (error) {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        (error as { code: string }).code === "23505"
-      ) {
-        throw new ConflictException(
-          "You have already submitted an application for this job",
-        );
+      return await this.dataSource.transaction(async (manager) => {
+        const repo = manager.getRepository(JobApplication);
+        const existing = await repo.findOneBy({ jobId, applicantId: user.id });
+        if (existing) throw new ConflictException("You have already applied for this job");
+        const app = await repo.save(repo.create({
+          jobId, applicantId: user.id, coverLetter: dto.coverLetter,
+          resumeUrl: dto.resumeUrl, status: ApplicationStatus.PENDING, withdrawnAt: null,
+        }));
+        await manager.getRepository(ApplicationStatusHistory).save({
+          applicationId: app.id, fromStatus: null, toStatus: ApplicationStatus.PENDING,
+          changedBy: user.id, note: "Application submitted",
+        });
+        return app;
+      });
+    } catch (error: unknown) {
+      const pgError = error as { code?: string; driverError?: { code?: string } };
+      if (pgError.code === "23505" || pgError.driverError?.code === "23505") {
+        throw new ConflictException("You have already applied for this job");
       }
       throw error;
     }
   }
 
-  // 2. GET /applications/me (Access: JOB_SEEKER)
   async findMyApplications(userId: string, query: QueryApplicationDto) {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const skip = (page - 1) * limit;
-
-    const [data, total] = await this.applicationRepository.findAndCount({
-      where: { applicantId: userId },
-      relations: ["job", "job.organization"],
-      skip,
-      take: limit,
-      order: { createdAt: "DESC" },
-    });
-
-    return {
-      data,
-      total,
-      page,
-      limit,
-    };
+    const page = query.page ?? 1, limit = query.limit ?? 10;
+    const qb = this.applications.createQueryBuilder("application")
+      .leftJoinAndSelect("application.job", "job")
+      .where("application.applicantId = :userId", { userId });
+    if (query.status) qb.andWhere("application.status = :status", { status: query.status });
+    const [data, total] = await qb.orderBy("application.createdAt", "DESC")
+      .skip((page - 1) * limit).take(limit).getManyAndCount();
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  // 3. GET /jobs/:jobId/applications (Access: Owner EMPLOYER)
-  async findByJob(
-    jobId: string,
-    userId: string,
-    query: QueryApplicationDto,
-  ) {
-    const job = await this.jobRepository.findOne({
-      where: { id: jobId },
-    });
-
-    if (!job) {
-      throw new NotFoundException(`Job with ID ${jobId} not found`);
+  async findByJob(jobId: string, userId: string, query: QueryApplicationDto) {
+    const job = await this.jobs.findOneBy({ id: jobId });
+    if (!job) throw new NotFoundException("Job not found");
+    if (!await this.organizationsService.isOrgOwner(userId, job.organizationId)) {
+      throw new ForbiddenException("Not authorized to view applications for this job");
     }
-
-    const isOwner = await this.organizationsService.isOrgOwner(
-      userId,
-      job.organizationId,
-    );
-
-    if (!isOwner) {
-      throw new ForbiddenException(
-        "You do not have permission to view applications for this job",
-      );
-    }
-
-    const page = query.page ?? 1;
-    const limit = query.limit ?? 10;
-    const skip = (page - 1) * limit;
-
-    const [data, total] = await this.applicationRepository.findAndCount({
-      where: { jobId },
-      relations: ["applicant"],
-      skip,
-      take: limit,
-      order: { createdAt: "DESC" },
-    });
-
-    return {
-      data,
-      total,
-      page,
-      limit,
-    };
+    const page = query.page ?? 1, limit = query.limit ?? 10;
+    const qb = this.applications.createQueryBuilder("application")
+      .where("application.jobId = :jobId", { jobId });
+    if (query.status) qb.andWhere("application.status = :status", { status: query.status });
+    const [data, total] = await qb.orderBy("application.createdAt", "DESC")
+      .skip((page - 1) * limit).take(limit).getManyAndCount();
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  // 4. GET /applications/:id (Access: Applicant or job owner)
-  async findOne(id: string, user: AuthUser): Promise<JobApplication> {
-    const application = await this.applicationRepository.findOne({
+  async findOne(id: string, user: AuthUser) {
+    const app = await this.applications.findOne({
       where: { id },
-      relations: ["job", "job.organization", "applicant"],
+      relations: { job: true, statusHistory: true },
     });
-
-    if (!application) {
-      throw new NotFoundException(`Application with ID ${id} not found`);
+    if (!app) throw new NotFoundException("Application not found");
+    if (app.applicantId !== user.id && !user.roles?.includes(Role.ADMIN)) {
+      await this.requireOwner(app.job.organizationId, user);
     }
-
-    const isApplicant = application.applicantId === user.id;
-    const isAdmin = user.roles?.includes(Role.ADMIN);
-    const isJobOwner = application.job?.organizationId
-      ? await this.organizationsService.isOrgOwner(
-          user.id,
-          application.job.organizationId,
-        )
-      : false;
-
-    if (!isApplicant && !isJobOwner && !isAdmin) {
-      throw new ForbiddenException(
-        "You do not have permission to view this application",
-      );
-    }
-
-    return application;
+    app.statusHistory?.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    return app;
   }
 
-  // 5. PATCH /applications/:id/status (Access: Job owner EMPLOYER)
-  async updateStatus(
-    id: string,
-    dto: UpdateApplicationStatusDto,
-    user: AuthUser,
-  ): Promise<JobApplication> {
-    const application = await this.applicationRepository.findOne({
-      where: { id },
-      relations: ["job"],
+  async updateStatus(id: string, dto: UpdateApplicationStatusDto, user: AuthUser) {
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(JobApplication);
+      const app = await repo.createQueryBuilder("a")
+        .where("a.id = :id", { id }).setLock("pessimistic_write").getOne();
+      if (!app) throw new NotFoundException("Application not found");
+      const job = await manager.getRepository(Job).findOneBy({ id: app.jobId });
+      if (!job) throw new NotFoundException("Job not found");
+      await this.requireOwner(job.organizationId, user);
+      if (this.isTerminal(app.status)) throw new ConflictException("Application has a final status");
+      if (app.status === dto.status) throw new ConflictException("Application is already in that status");
+      const previous = app.status;
+      app.status = dto.status;
+      await repo.save(app);
+      await manager.getRepository(ApplicationStatusHistory).save({
+        applicationId: app.id, fromStatus: previous, toStatus: dto.status,
+        changedBy: user.id, note: dto.note ?? null,
+      });
+      return app;
     });
-
-    if (!application) {
-      throw new NotFoundException(`Application with ID ${id} not found`);
-    }
-
-    const isAdmin = user.roles?.includes(Role.ADMIN);
-    const isJobOwner = application.job?.organizationId
-      ? await this.organizationsService.isOrgOwner(
-          user.id,
-          application.job.organizationId,
-        )
-      : false;
-
-    if (!isJobOwner && !isAdmin) {
-      throw new ForbiddenException(
-        "You do not have permission to update this application status",
-      );
-    }
-
-    application.status = dto.status;
-    return await this.applicationRepository.save(application);
   }
 
-  // 6. DELETE /applications/:id (Access: Applicant withdraw)
-  async remove(id: string, user: AuthUser): Promise<{ message: string }> {
-    const application = await this.applicationRepository.findOne({
-      where: { id },
+  async remove(id: string, user: AuthUser) {
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(JobApplication);
+      const app = await repo.createQueryBuilder("a")
+        .where("a.id = :id", { id }).setLock("pessimistic_write").getOne();
+      if (!app) throw new NotFoundException("Application not found");
+      if (app.applicantId !== user.id) throw new ForbiddenException("You can only withdraw your own application");
+      if (this.isTerminal(app.status)) throw new ConflictException("Application cannot be withdrawn");
+      const previous = app.status;
+      app.status = ApplicationStatus.WITHDRAWN;
+      app.withdrawnAt = new Date();
+      await repo.save(app);
+      await manager.getRepository(ApplicationStatusHistory).save({
+        applicationId: app.id, fromStatus: previous, toStatus: ApplicationStatus.WITHDRAWN,
+        changedBy: user.id, note: "Applicant withdrew",
+      });
+      return { id: app.id, status: app.status, message: "Application withdrawn" };
     });
-
-    if (!application) {
-      throw new NotFoundException(`Application with ID ${id} not found`);
-    }
-
-    const isApplicant = application.applicantId === user.id;
-    const isAdmin = user.roles?.includes(Role.ADMIN);
-
-    if (!isApplicant && !isAdmin) {
-      throw new ForbiddenException(
-        "You can only withdraw your own applications",
-      );
-    }
-
-    await this.applicationRepository.remove(application);
-
-    return {
-      message: "Application withdrawn successfully",
-    };
   }
 }

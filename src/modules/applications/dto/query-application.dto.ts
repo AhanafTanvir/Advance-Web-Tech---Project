@@ -1,26 +1,18 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, Max, Min } from "class-validator";
+import { IsEnum, IsInt, IsOptional, Max, Min } from "class-validator";
+import { ApplicationStatus } from "../entities/job-application.entity";
 
 export class QueryApplicationDto {
-  @ApiPropertyOptional({
-    description: "Page number (1-based)",
-    default: 1,
-  })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @IsOptional()
-  page: number = 1;
+  @ApiPropertyOptional({ default: 1 })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  page = 1;
 
-  @ApiPropertyOptional({
-    description: "Number of records per page",
-    default: 10,
-  })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  @IsOptional()
-  limit: number = 10;
+  @ApiPropertyOptional({ default: 10 })
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100)
+  limit = 10;
+
+  @ApiPropertyOptional({ enum: ApplicationStatus })
+  @IsOptional() @IsEnum(ApplicationStatus)
+  status?: ApplicationStatus;
 }

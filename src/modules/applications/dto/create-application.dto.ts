@@ -1,24 +1,15 @@
-import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, MaxLength } from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
+import { IsString, IsUrl, MaxLength, MinLength } from "class-validator";
 
 export class CreateApplicationDto {
-  @ApiPropertyOptional({
-    description: "URL link to the applicant's resume or portfolio",
-    example: "https://example.com/resumes/john-doe.pdf",
-    maxLength: 500,
-  })
-  @IsOptional()
-  @IsString()
+  @ApiProperty({ example: "https://example.com/resume.pdf" })
+  @IsUrl({ require_protocol: true })
   @MaxLength(500)
-  resumeUrl?: string;
+  resumeUrl!: string;
 
-  @ApiPropertyOptional({
-    description: "Cover letter text introducing the applicant and their qualifications",
-    example: "I am writing to express my strong interest in the Senior NestJS Developer role at TechCorp...",
-    maxLength: 5000,
-  })
-  @IsOptional()
+  @ApiProperty({ example: "I have experience with NestJS and PostgreSQL." })
   @IsString()
+  @MinLength(10)
   @MaxLength(5000)
-  coverLetter?: string;
+  coverLetter!: string;
 }

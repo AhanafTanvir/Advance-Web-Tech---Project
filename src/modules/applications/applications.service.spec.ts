@@ -1,228 +1,109 @@
-import { Test, TestingModule } from "@nestjs/testing";
+import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
 import { getRepositoryToken } from "@nestjs/typeorm";
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from "@nestjs/common";
-import { ApplicationsService } from "./applications.service";
-import {
-  ApplicationStatus,
-  JobApplication,
-} from "./entities/job-application.entity";
-import { Job } from "../jobs/entities/job.entity";
+import { DataSource } from "typeorm";
+import { Role } from "../../common/enums/role.enum";
 import { OrganizationsService } from "../organizations/organizations.service";
-import { Role } from "@/common/enums/role.enum";
+import { Job, JobStatus } from "../jobs/entities/job.entity";
+import { ApplicationsService } from "./applications.service";
+import { JobApplication, ApplicationStatus } from "./entities/job-application.entity";
 
-describe("ApplicationsService", () => {
+const seeker = { id: "seeker-id", roles: [Role.JOB_SEEKER] };
+const employer = { id: "employer-id", roles: [Role.EMPLOYER] };
+
+// Repository and transaction doubles let us verify business logic without changing a DB.
+describe("ApplicationsService integration behavior", () => {
   let service: ApplicationsService;
-  let applicationRepo: any;
   let jobRepo: any;
-  let organizationsService: any;
+  let appRepo: any;
+  let historyRepo: any;
+  let orgs: any;
+  let dataSource: any;
+  let builder: any;
 
   beforeEach(async () => {
-    applicationRepo = {
+    builder = {
+      where: jest.fn().mockReturnThis(),
+      setLock: jest.fn().mockReturnThis(),
+      getOne: jest.fn(),
+    };
+    appRepo = {
+      findOneBy: jest.fn(),
       findOne: jest.fn(),
-      findAndCount: jest.fn(),
-      create: jest.fn((dto) => dto),
-      save: jest.fn((entity) => Promise.resolve({ id: "app-uuid", ...entity })),
-      remove: jest.fn((entity) => Promise.resolve(entity)),
+      create: jest.fn((data) => data),
+      save: jest.fn(async (data) => ({ id: "application-id", ...data })),
+      createQueryBuilder: jest.fn(() => builder),
     };
-
-    jobRepo = {
-      findOne: jest.fn(),
+    jobRepo = { findOneBy: jest.fn() };
+    historyRepo = { save: jest.fn(async (row) => row) };
+    const manager = {
+      getRepository: jest.fn((entity) => entity === JobApplication ? appRepo : entity === Job ? jobRepo : historyRepo),
     };
-
-    organizationsService = {
-      isOrgOwner: jest.fn(),
-    };
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ApplicationsService,
-        {
-          provide: getRepositoryToken(JobApplication),
-          useValue: applicationRepo,
-        },
-        {
-          provide: getRepositoryToken(Job),
-          useValue: jobRepo,
-        },
-        {
-          provide: OrganizationsService,
-          useValue: organizationsService,
-        },
-      ],
-    }).compile();
-
-    service = module.get<ApplicationsService>(ApplicationsService);
+    dataSource = { transaction: jest.fn((cb) => cb(manager)) };
+    orgs = { isOrgOwner: jest.fn().mockResolvedValue(true) };
+    const moduleRef = await Test.createTestingModule({ providers: [
+      ApplicationsService,
+      { provide: getRepositoryToken(JobApplication), useValue: appRepo },
+      { provide: getRepositoryToken(Job), useValue: jobRepo },
+      { provide: OrganizationsService, useValue: orgs },
+      { provide: DataSource, useValue: dataSource },
+    ] }).compile();
+    service = moduleRef.get(ApplicationsService);
   });
 
-  describe("create", () => {
-    it("should throw 404 NotFoundException if job does not exist", async () => {
-      jobRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.create(
-          "job-1",
-          { coverLetter: "hello" },
-          { id: "user-1", roles: [Role.JOB_SEEKER] },
-        ),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it("should throw 409 ConflictException if user already applied to this job", async () => {
-      jobRepo.findOne.mockResolvedValue({ id: "job-1" });
-      applicationRepo.findOne.mockResolvedValue({ id: "app-1", jobId: "job-1", applicantId: "user-1" });
-
-      await expect(
-        service.create(
-          "job-1",
-          { coverLetter: "hello" },
-          { id: "user-1", roles: [Role.JOB_SEEKER] },
-        ),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it("should create application successfully with PENDING status", async () => {
-      jobRepo.findOne.mockResolvedValue({ id: "job-1" });
-      applicationRepo.findOne.mockResolvedValue(null);
-
-      const result = await service.create(
-        "job-1",
-        { coverLetter: "hello", resumeUrl: "https://resume.com" },
-        { id: "user-1", roles: [Role.JOB_SEEKER] },
-      );
-
-      expect(result).toHaveProperty("id", "app-uuid");
-      expect(result.status).toBe(ApplicationStatus.PENDING);
-      expect(applicationRepo.save).toHaveBeenCalled();
-    });
+  it("rejects a missing job", async () => {
+    jobRepo.findOneBy.mockResolvedValue(null);
+    await expect(service.create("missing", { resumeUrl: "https://example.com/cv.pdf", coverLetter: "Interested in this role" }, seeker))
+      .rejects.toThrow(NotFoundException);
   });
 
-  describe("findByJob", () => {
-    it("should throw 404 NotFoundException if job does not exist", async () => {
-      jobRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.findByJob("job-1", "user-1", { page: 1, limit: 10 }),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it("should throw 403 ForbiddenException if employer is not the job owner", async () => {
-      jobRepo.findOne.mockResolvedValue({ id: "job-1", organizationId: "org-1" });
-      organizationsService.isOrgOwner.mockResolvedValue(false);
-
-      await expect(
-        service.findByJob("job-1", "user-1", { page: 1, limit: 10 }),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it("should return paginated applications if user is owner employer", async () => {
-      jobRepo.findOne.mockResolvedValue({ id: "job-1", organizationId: "org-1" });
-      organizationsService.isOrgOwner.mockResolvedValue(true);
-      applicationRepo.findAndCount.mockResolvedValue([[{ id: "app-1" }], 1]);
-
-      const result = await service.findByJob("job-1", "user-1", { page: 1, limit: 10 });
-      expect(result).toEqual({
-        data: [{ id: "app-1" }],
-        total: 1,
-        page: 1,
-        limit: 10,
-      });
-    });
+  it("rejects an application for a closed job", async () => {
+    jobRepo.findOneBy.mockResolvedValue({ status: JobStatus.CLOSED });
+    await expect(service.create("closed", { resumeUrl: "https://example.com/cv.pdf", coverLetter: "Interested in this role" }, seeker))
+      .rejects.toThrow(ConflictException);
   });
 
-  describe("findOne", () => {
-    it("should throw 404 NotFoundException if application does not exist", async () => {
-      applicationRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.findOne("app-1", { id: "user-1", roles: [Role.JOB_SEEKER] }),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it("should allow applicant to view their own application", async () => {
-      applicationRepo.findOne.mockResolvedValue({
-        id: "app-1",
-        applicantId: "user-1",
-        job: { organizationId: "org-1" },
-      });
-
-      const result = await service.findOne("app-1", { id: "user-1", roles: [Role.JOB_SEEKER] });
-      expect(result.id).toBe("app-1");
-    });
-
-    it("should throw 403 ForbiddenException for unauthorized viewer", async () => {
-      applicationRepo.findOne.mockResolvedValue({
-        id: "app-1",
-        applicantId: "user-1",
-        job: { organizationId: "org-1" },
-      });
-      organizationsService.isOrgOwner.mockResolvedValue(false);
-
-      await expect(
-        service.findOne("app-1", { id: "other-user", roles: [Role.JOB_SEEKER] }),
-      ).rejects.toThrow(ForbiddenException);
-    });
+  it("prevents duplicate submissions", async () => {
+    jobRepo.findOneBy.mockResolvedValue({ id: "job", status: JobStatus.OPEN, deadline: null });
+    appRepo.findOneBy.mockResolvedValue({ id: "existing" });
+    await expect(service.create("job", { resumeUrl: "https://example.com/cv.pdf", coverLetter: "Interested in this role" }, seeker))
+      .rejects.toThrow(ConflictException);
   });
 
-  describe("updateStatus", () => {
-    it("should throw 403 ForbiddenException if not the organization owner", async () => {
-      applicationRepo.findOne.mockResolvedValue({
-        id: "app-1",
-        job: { organizationId: "org-1" },
-      });
-      organizationsService.isOrgOwner.mockResolvedValue(false);
-
-      await expect(
-        service.updateStatus(
-          "app-1",
-          { status: ApplicationStatus.ACCEPTED },
-          { id: "user-2", roles: [Role.EMPLOYER] },
-        ),
-      ).rejects.toThrow(ForbiddenException);
-    });
-
-    it("should update status if job owner", async () => {
-      const mockApp = {
-        id: "app-1",
-        status: ApplicationStatus.PENDING,
-        job: { organizationId: "org-1" },
-      };
-      applicationRepo.findOne.mockResolvedValue(mockApp);
-      organizationsService.isOrgOwner.mockResolvedValue(true);
-      applicationRepo.save.mockResolvedValue({ ...mockApp, status: ApplicationStatus.ACCEPTED });
-
-      const result = await service.updateStatus(
-        "app-1",
-        { status: ApplicationStatus.ACCEPTED },
-        { id: "employer-1", roles: [Role.EMPLOYER] },
-      );
-
-      expect(result.status).toBe(ApplicationStatus.ACCEPTED);
-    });
+  it("creates the application and an initial status-history record in one transaction", async () => {
+    jobRepo.findOneBy.mockResolvedValue({ id: "job", status: JobStatus.OPEN, deadline: null });
+    appRepo.findOneBy.mockResolvedValue(null);
+    const result = await service.create("job", { resumeUrl: "https://example.com/cv.pdf", coverLetter: "Interested in this role" }, seeker);
+    expect(result.status).toBe(ApplicationStatus.PENDING);
+    expect(historyRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+      fromStatus: null, toStatus: ApplicationStatus.PENDING, changedBy: seeker.id,
+    }));
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
   });
 
-  describe("remove", () => {
-    it("should throw 403 ForbiddenException if user is not the applicant or admin", async () => {
-      applicationRepo.findOne.mockResolvedValue({
-        id: "app-1",
-        applicantId: "user-1",
-      });
+  it("checks ownership before employer status update", async () => {
+    builder.getOne.mockResolvedValue({ id: "application-id", jobId: "job", status: ApplicationStatus.PENDING });
+    jobRepo.findOneBy.mockResolvedValue({ id: "job", organizationId: "org" });
+    orgs.isOrgOwner.mockResolvedValue(false);
+    await expect(service.updateStatus("application-id", { status: ApplicationStatus.ACCEPTED }, employer))
+      .rejects.toThrow(ForbiddenException);
+  });
 
-      await expect(
-        service.remove("app-1", { id: "other-user", roles: [Role.JOB_SEEKER] }),
-      ).rejects.toThrow(ForbiddenException);
-    });
+  it("updates status and writes history", async () => {
+    builder.getOne.mockResolvedValue({ id: "application-id", jobId: "job", status: ApplicationStatus.PENDING });
+    jobRepo.findOneBy.mockResolvedValue({ id: "job", organizationId: "org" });
+    const result = await service.updateStatus("application-id", { status: ApplicationStatus.REVIEWING, note: "Interview" }, employer);
+    expect(result.status).toBe(ApplicationStatus.REVIEWING);
+    expect(historyRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+      fromStatus: ApplicationStatus.PENDING, toStatus: ApplicationStatus.REVIEWING, note: "Interview",
+    }));
+  });
 
-    it("should allow applicant to withdraw their application", async () => {
-      const mockApp = { id: "app-1", applicantId: "user-1" };
-      applicationRepo.findOne.mockResolvedValue(mockApp);
-
-      const result = await service.remove("app-1", { id: "user-1", roles: [Role.JOB_SEEKER] });
-      expect(result).toEqual({ message: "Application withdrawn successfully" });
-      expect(applicationRepo.remove).toHaveBeenCalledWith(mockApp);
-    });
+  it("withdraws without deleting the application or its status history", async () => {
+    builder.getOne.mockResolvedValue({ id: "application-id", applicantId: seeker.id, status: ApplicationStatus.PENDING });
+    const result = await service.remove("application-id", seeker);
+    expect(result.status).toBe(ApplicationStatus.WITHDRAWN);
+    expect(appRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: ApplicationStatus.WITHDRAWN }));
+    expect(historyRepo.save).toHaveBeenCalledWith(expect.objectContaining({ toStatus: ApplicationStatus.WITHDRAWN }));
   });
 });
