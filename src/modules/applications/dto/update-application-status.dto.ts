@@ -1,16 +1,19 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsEnum, IsNotEmpty } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsIn, IsOptional, IsString, MaxLength } from "class-validator";
 import { ApplicationStatus } from "../entities/job-application.entity";
 
+const employerStatuses = [
+  ApplicationStatus.REVIEWING,
+  ApplicationStatus.ACCEPTED,
+  ApplicationStatus.REJECTED,
+];
+
 export class UpdateApplicationStatusDto {
-  @ApiProperty({
-    enum: ApplicationStatus,
-    description: "New status of the job application",
-    example: ApplicationStatus.ACCEPTED,
-  })
-  @IsEnum(ApplicationStatus, {
-    message: `status must be one of the following values: ${Object.values(ApplicationStatus).join(", ")}`,
-  })
-  @IsNotEmpty()
+  @ApiProperty({ enum: employerStatuses })
+  @IsIn(employerStatuses)
   status!: ApplicationStatus;
+
+  @ApiPropertyOptional({ example: "Shortlisted for interview" })
+  @IsOptional() @IsString() @MaxLength(1000)
+  note?: string;
 }
