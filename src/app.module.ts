@@ -9,11 +9,13 @@ import { BullModule } from "@nestjs/bull";
 import { OrganizationsModule } from "./modules/organizations/organizations.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ProfilesModule } from "./modules/profiles/profiles.module";
+import { ProjectsModule } from "./modules/projects/projects.module";
 
 @Module({
   imports: [
     PostgresDatabaseProviderModule,
     ProfilesModule,
+    ProjectsModule,
 
     ConfigModule.forRoot({
       isGlobal: true,
