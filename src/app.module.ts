@@ -1,4 +1,3 @@
-
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { PostgresDatabaseProviderModule } from "@/providers/database/postgres/provider.module";
@@ -10,6 +9,8 @@ import { OrganizationsModule } from "./modules/organizations/organizations.modul
 import { AuthModule } from "./modules/auth/auth.module";
 import { ProfilesModule } from "./modules/profiles/profiles.module";
 import { ProjectsModule } from "./modules/projects/projects.module";
+import { JobsModule } from "./modules/jobs/jobs.module";
+import { ApplicationsModule } from "./modules/applications/applications.module";
 
 @Module({
   imports: [
@@ -33,6 +34,8 @@ import { ProjectsModule } from "./modules/projects/projects.module";
 
     OrganizationsModule,
     AuthModule,
+    JobsModule,
+    ApplicationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
