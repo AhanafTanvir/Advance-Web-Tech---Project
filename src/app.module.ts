@@ -8,6 +8,7 @@ import { BullModule } from "@nestjs/bull";
 import { OrganizationsModule } from "./modules/organizations/organizations.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ProfilesModule } from "./modules/profiles/profiles.module";
+import { ProjectsModule } from "./modules/projects/projects.module";
 import { JobsModule } from "./modules/jobs/jobs.module";
 import { ApplicationsModule } from "./modules/applications/applications.module";
 
@@ -15,6 +16,7 @@ import { ApplicationsModule } from "./modules/applications/applications.module";
   imports: [
     PostgresDatabaseProviderModule,
     ProfilesModule,
+    ProjectsModule,
 
     ConfigModule.forRoot({
       isGlobal: true,

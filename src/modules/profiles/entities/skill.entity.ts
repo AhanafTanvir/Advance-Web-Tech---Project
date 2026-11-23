@@ -9,6 +9,7 @@ import {
 } from "typeorm";
 
 import { ProfileSkill } from "./profile-skill.entity";
+import { ProjectSkill } from "@/modules/projects/entities/project-skill.entity";
 
 @Entity({ name: "skills" })
 @Index("UQ_skills_name", ["name"], { unique: true })
@@ -31,6 +32,9 @@ export class Skill {
 
   @OneToMany(() => ProfileSkill, (profileSkill) => profileSkill.skill)
   profileSkills!: ProfileSkill[];
+
+  @OneToMany(() => ProjectSkill, (projectSkill) => projectSkill.skill)
+  projectSkills!: ProjectSkill[];
 
   @CreateDateColumn({
     name: "created_at",
