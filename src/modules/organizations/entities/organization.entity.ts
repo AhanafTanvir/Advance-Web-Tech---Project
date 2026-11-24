@@ -23,7 +23,7 @@ export class Organization {
   @Column({ type: "varchar", length: 255, nullable: true })
   location!: string | null;
 
-  @Column({ type: "boolean", default: false })
+  @Column({ type: "boolean", name:"isVerified", default: false })
   isVerified!: boolean;
 
   @CreateDateColumn({ name: "created_at" })

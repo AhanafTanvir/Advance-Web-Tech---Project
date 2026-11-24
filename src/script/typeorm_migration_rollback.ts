@@ -1,28 +1,25 @@
-
-import { DataSource } from "typeorm";
 import { dataSourceOptions } from "@/config/database.config";
+import { DataSource } from "typeorm";
+import { PostgresConnectionOptions } from "typeorm/driver/postgres/PostgresConnectionOptions";
 
-async function migrateRollback(): Promise<void> {
-  console.log("Starting database migration rollback...");
-
-  const dataSource = new DataSource(dataSourceOptions);
+const migrateRollback = async () => {
+  console.log(`Rolling back.....`);
+  const ds = new DataSource({
+    ...dataSourceOptions,
+  } as PostgresConnectionOptions);
 
   try {
-    await dataSource.initialize();
-    console.log("Database connection established.");
-
-    await dataSource.undoLastMigration();
-
-    console.log("Last migration successfully reverted.");
-  } catch (error) {
-    console.error("Migration rollback failed:", error);
-    process.exitCode = 1;
+    await ds.initialize();
+    await ds.undoLastMigration();
+    console.log("Rollback completed.");
+  } catch (err) {
+    console.error("Rollback failed:", err);
+    process.exit(1);
   } finally {
-    if (dataSource.isInitialized) {
-      await dataSource.destroy();
-      console.log("Database connection closed.");
+    if (ds.isInitialized) {
+      await ds.destroy();
     }
   }
-}
+};
 
-void migrateRollback();
+migrateRollback();

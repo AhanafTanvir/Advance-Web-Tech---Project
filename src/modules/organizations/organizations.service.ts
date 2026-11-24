@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Organization } from "./entities/organization.entity";
 import { DataSource, Repository } from "typeorm";
@@ -8,6 +8,8 @@ import {
 } from "./entities/organization-membership.entity";
 import { CreateOrganizationDto } from "./dto/create-organization.dto";
 import { UpdateOrganizationDto } from "./dto/update-organization.dto";
+import { User } from "../users/entities/user.entity";
+import { Role } from "@/src/common/enums/role.enum";
 
 @Injectable()
 export class OrganizationsService {
@@ -28,14 +30,12 @@ export class OrganizationsService {
 
       const membership = manager.create(OrganizationMembership, {
         userId: userId,
-        organiztionId: org.id,
+        organizationId: org.id,
         role: MembershipRole.OWNER,
       });
       await manager.save(membership);
 
-      await manager.query(`UPDATE users SET role = 'EMPLOYER' WHERE id = $1`, [
-        userId,
-      ]);
+      await manager.update(User,userId, { role: Role.EMPLOYER });
 
       return org;
     });
@@ -59,8 +59,13 @@ export class OrganizationsService {
     return org;
   }
 
-  async update(id: string, updateOrgDto: UpdateOrganizationDto) {
+  async update(id: string, updateOrgDto: UpdateOrganizationDto, userId: string, userRoles: string[]) {
     const org = await this.findOne(id);
+    const isAdmin = userRoles.includes(Role.ADMIN);
+    const isOwner = await this.isOrgOwner(userId, id);
+    if (!isAdmin && !isOwner) {
+      throw new ForbiddenException(`You do not have permission to update this organization`);
+    }
     Object.assign(org, updateOrgDto);
     return await this.orgRepository.save(org);
   }
@@ -75,8 +80,13 @@ export class OrganizationsService {
     return org;
   }
 
-  async remove(id: string) {
+  async remove(id: string, userId: string, userRoles: string[]) {
     const org = await this.findOne(id);
+    const isAdmin = userRoles.includes(Role.ADMIN);
+    const isOwner = await this.isOrgOwner(userId, id);
+    if (!isAdmin && !isOwner) {
+      throw new ForbiddenException(`You do not have permission to remove this organization`);
+    }
     await this.orgRepository.remove(org);
     return {
       message: `Organization with ID ${id} has been removed successfully`,

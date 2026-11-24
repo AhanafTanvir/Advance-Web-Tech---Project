@@ -1,36 +1,31 @@
-
-import { DataSource } from "typeorm";
 import { dataSourceOptions } from "@/config/database.config";
+import { DataSource } from "typeorm";
+import { PostgresConnectionOptions } from "typeorm/driver/postgres/PostgresConnectionOptions";
 
-async function migrateRun(): Promise<void> {
-  console.log("Starting database migrations...");
-
-  const dataSource = new DataSource(dataSourceOptions);
+const migrateRun = async () => {
+  console.log(`Migrating.....`);
+  const ds = new DataSource({
+    ...dataSourceOptions,
+  } as PostgresConnectionOptions);
 
   try {
-    await dataSource.initialize();
-    console.log("Database connection established.");
-
-    const migrations = await dataSource.runMigrations();
-
+    await ds.initialize();
+    const migrations = await ds.runMigrations();
     if (migrations.length === 0) {
-      console.log("No pending migrations.");
+      console.log("No new migrations to run.");
     } else {
-      console.log("Successfully executed migrations:");
-
-      migrations.forEach((migration) => {
-        console.log(`- ${migration.name}`);
-      });
+      console.log(`Successfully executed ${migrations.length} migration(s):`);
+      migrations.forEach((m) => console.log(`  - ${m.name}`));
     }
-  } catch (error) {
-    console.error("Migration execution failed:", error);
-    process.exitCode = 1;
+    console.log("Migration completed.");
+  } catch (err) {
+    console.error("Migration failed:", err);
+    process.exit(1);
   } finally {
-    if (dataSource.isInitialized) {
-      await dataSource.destroy();
-      console.log("Database connection closed.");
+    if (ds.isInitialized) {
+      await ds.destroy();
     }
   }
-}
+};
 
-void migrateRun();
+migrateRun();
