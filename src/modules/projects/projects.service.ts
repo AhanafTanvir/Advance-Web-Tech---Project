@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { DataSource, In } from "typeorm";
+import { DataSource } from "typeorm";
 
 import { Project } from "./entities/project.entity";
 import { ProjectSkill } from "./entities/project-skill.entity";
@@ -14,25 +14,22 @@ import { CreateProjectDto } from "./dto/create-project.dto";
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+  ) {}
 
-  async create(clientId: string, dto: CreateProjectDto): Promise<Project> {
-    if (
-      dto.budgetMin !== undefined &&
-      dto.budgetMax !== undefined &&
-      dto.budgetMin > dto.budgetMax
-    ) {
-      throw new BadRequestException(
-        "Minimum budget cannot exceed maximum budget",
-      );
-    }
-
+  async create(
+    clientId: string,
+    dto: CreateProjectDto,
+  ): Promise<Project> {
     return this.dataSource.transaction(async (manager) => {
       const userRepository = manager.getRepository(User);
       const projectRepository = manager.getRepository(Project);
+      const projectSkillRepository =
+        manager.getRepository(ProjectSkill);
       const skillRepository = manager.getRepository(Skill);
-      const projectSkillRepository = manager.getRepository(ProjectSkill);
 
+      // 1. Verify the client account
       const client = await userRepository.findOne({
         where: { id: clientId },
       });
@@ -41,20 +38,35 @@ export class ProjectsService {
         throw new NotFoundException("Client account not found");
       }
 
-      let skills: Skill[] = [];
+      // 2. Validate the project budget
+      if (
+        dto.budgetMin !== undefined &&
+        dto.budgetMax !== undefined &&
+        dto.budgetMin > dto.budgetMax
+      ) {
+        throw new BadRequestException(
+          "Minimum budget cannot exceed maximum budget",
+        );
+      }
+
+      // 3. Validate requested skills
+      const skills: Skill[] = [];
 
       if (dto.skillIds?.length) {
-        skills = await skillRepository.find({
-          where: { id: In(dto.skillIds) },
-        });
+        const foundSkills = await skillRepository.findByIds(
+          dto.skillIds,
+        );
 
-        if (skills.length !== dto.skillIds.length) {
+        if (foundSkills.length !== dto.skillIds.length) {
           throw new BadRequestException(
             "One or more provided skill IDs do not exist",
           );
         }
+
+        skills.push(...foundSkills);
       }
 
+      // 4. Create and save the project
       const project = projectRepository.create({
         client,
         title: dto.title,
@@ -68,6 +80,7 @@ export class ProjectsService {
 
       const savedProject = await projectRepository.save(project);
 
+      // 5. Save project-skill associations
       if (skills.length > 0) {
         const projectSkills = skills.map((skill) =>
           projectSkillRepository.create({
@@ -79,6 +92,7 @@ export class ProjectsService {
         await projectSkillRepository.save(projectSkills);
       }
 
+      // 6. Return the project with its relations
       const result = await projectRepository.findOne({
         where: { id: savedProject.id },
         relations: {
@@ -90,7 +104,9 @@ export class ProjectsService {
       });
 
       if (!result) {
-        throw new NotFoundException("Project could not be retrieved");
+        throw new NotFoundException(
+          "Created project could not be retrieved",
+        );
       }
 
       return result;
