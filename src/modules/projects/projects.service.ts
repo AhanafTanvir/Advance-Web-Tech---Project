@@ -22,7 +22,7 @@ export class ProjectsService {
     clientId: string,
     dto: CreateProjectDto,
   ): Promise<Project> {
-    return this.dataSource.transaction(async (manager) => {
+    return this.dataSource.transaction<Project>(async (manager): Promise<Project> => {
       const userRepository = manager.getRepository(User);
       const projectRepository = manager.getRepository(Project);
       const projectSkillRepository =
@@ -79,6 +79,9 @@ export class ProjectsService {
       });
 
       const savedProject = await projectRepository.save(project);
+      
+      // TEMPORARY: Test transaction rollback
+      // throw new Error("Simulated transaction failure");
 
       // 5. Save project-skill associations
       if (skills.length > 0) {
@@ -109,7 +112,7 @@ export class ProjectsService {
         );
       }
 
-      return result;
+      return result!;
     });
   }
 }
